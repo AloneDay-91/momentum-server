@@ -1,3 +1,4 @@
+import "./polyfill-symbol-metadata";
 import "dotenv/config";
 import { Server, matchMaker } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
