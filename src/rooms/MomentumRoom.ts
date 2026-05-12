@@ -24,7 +24,6 @@ interface PlayerInputMessage {
 }
 
 interface AuthData {
-  playerNumber: number;
   pseudo: string;
 }
 
@@ -37,6 +36,9 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
   maxClients = MAX_CLIENTS_PER_ROOM;
   patchRate = 1000 / TICK_RATE_HZ;
   autoDispose = true;
+
+  private elapsedInterval?: { clear(): void };
+  private countdownInterval?: { clear(): void };
 
   onCreate(options: { gameSessionId?: string }) {
     this.setState(new GameState());
@@ -56,21 +58,18 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
   // STUB auth — real implementation in M1.4
   async onAuth(_client: Client, options: JoinOptions): Promise<AuthData> {
     if (!options.token) throw new Error("Missing token");
-    const playerNumber = (this.state as GameState).players.size + 1;
-    return {
-      playerNumber,
-      pseudo: options.pseudo ?? `Player${playerNumber}`,
-    };
+    return { pseudo: options.pseudo ?? "Player" };
   }
 
   onJoin(client: Client, _options: JoinOptions, auth: AuthData) {
     const gameState = this.state as GameState;
+    const playerNumber = gameState.players.size + 1;
     const player = new PlayerState();
-    player.playerNumber = auth.playerNumber;
-    player.pseudo = auth.pseudo;
+    player.playerNumber = playerNumber;
+    player.pseudo = auth.pseudo === "Player" ? `Player${playerNumber}` : auth.pseudo;
     gameState.players.set(client.sessionId, player);
 
-    console.log(`[Room] ${auth.pseudo} (P${auth.playerNumber}) joined as ${client.sessionId}`);
+    console.log(`[Room] ${player.pseudo} (P${playerNumber}) joined as ${client.sessionId}`);
 
     if (gameState.players.size === MAX_CLIENTS_PER_ROOM) {
       this.startCountdown();
@@ -88,6 +87,8 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
   }
 
   onDispose() {
+    this.elapsedInterval?.clear();
+    this.countdownInterval?.clear();
     console.log(`[Room] Disposed`);
   }
 
@@ -97,10 +98,12 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     const gameState = this.state as GameState;
     gameState.status = "countdown";
     gameState.countdownRemaining = COUNTDOWN_SECONDS;
-    const interval = this.clock.setInterval(() => {
+    this.countdownInterval?.clear();
+    this.countdownInterval = this.clock.setInterval(() => {
       gameState.countdownRemaining -= 1;
       if (gameState.countdownRemaining <= 0) {
-        interval.clear();
+        this.countdownInterval?.clear();
+        this.countdownInterval = undefined;
         this.startGame();
       }
     }, 1000);
@@ -110,7 +113,8 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     const gameState = this.state as GameState;
     gameState.status = "playing";
     gameState.elapsedTime = 0;
-    this.clock.setInterval(() => {
+    this.elapsedInterval?.clear();
+    this.elapsedInterval = this.clock.setInterval(() => {
       if (gameState.status === "playing") gameState.elapsedTime += 0.1;
     }, 100);
   }
@@ -152,7 +156,7 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
   private handleFinish(client: Client, payload: { score: number }) {
     const gameState = this.state as GameState;
     const player = gameState.players.get(client.sessionId);
-    if (!player || player.hasFinished) return;
+    if (!player || player.hasFinished || gameState.status !== "playing") return;
     player.hasFinished = true;
     player.score = payload.score;
 
