@@ -112,6 +112,9 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
 
     if (gameState.status === "playing") {
       gameState.status = "finished";
+      this.determineWinner().catch((err) => {
+        console.error(`[Room] determineWinner on disconnect failed:`, err);
+      });
     }
   }
 
