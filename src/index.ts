@@ -4,12 +4,26 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { playground } from "@colyseus/playground";
 import express from "express";
+import cors from "cors";
 import basicAuth from "express-basic-auth";
 import { createServer } from "http";
 import { MomentumRoom } from "./rooms/MomentumRoom";
 
 const port = Number(process.env.PORT || 2567);
 const app = express();
+
+// CORS — allow the Next.js site (and any origin in dev) to reach the matchmake API.
+// In production tighten this to the actual game site origin.
+const allowedOrigins = (process.env.CORS_ORIGINS || "*")
+  .split(",")
+  .map((s) => s.trim());
+app.use(
+  cors({
+    origin: allowedOrigins.includes("*") ? true : allowedOrigins,
+    credentials: true,
+  })
+);
+
 const httpServer = createServer(app);
 
 const gameServer = new Server({
