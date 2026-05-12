@@ -1,29 +1,51 @@
-import { Schema, type } from "@colyseus/schema";
+import { Schema, defineTypes } from "@colyseus/schema";
 
 export class PlayerState extends Schema {
-  @type("number") playerNumber: number = 0;        // 1 ou 2
-  @type("string") pseudo: string = "";
+  playerNumber: number = 0;        // 1 ou 2
+  pseudo: string = "";
 
   // Transform
-  @type("number") posX: number = 0;
-  @type("number") posY: number = 0;
-  @type("number") posZ: number = 0;
-  @type("number") velX: number = 0;
-  @type("number") velY: number = 0;
-  @type("number") velZ: number = 0;
-  @type("number") rotY: number = 0;
+  posX: number = 0;
+  posY: number = 0;
+  posZ: number = 0;
+  velX: number = 0;
+  velY: number = 0;
+  velZ: number = 0;
+  rotY: number = 0;
 
   // Animation flags
-  @type("boolean") isGrounded: boolean = false;
-  @type("boolean") isSliding: boolean = false;
-  @type("boolean") isStunned: boolean = false;
-  @type("number") horizontalInput: number = 0;
+  isGrounded: boolean = false;
+  isSliding: boolean = false;
+  isStunned: boolean = false;
+  horizontalInput: number = 0;
 
   // Game state
-  @type("number") score: number = 0;
-  @type("number") distanceTraveled: number = 0;
-  @type("number") survivalTime: number = 0;
-  @type("number") collectibles: number = 0;
-  @type("boolean") hasFinished: boolean = false;
-  @type("boolean") isAlive: boolean = true;
+  score: number = 0;
+  distanceTraveled: number = 0;
+  survivalTime: number = 0;
+  collectibles: number = 0;
+  hasFinished: boolean = false;
+  isAlive: boolean = true;
 }
+
+defineTypes(PlayerState, {
+  playerNumber: "number",
+  pseudo: "string",
+  posX: "number",
+  posY: "number",
+  posZ: "number",
+  velX: "number",
+  velY: "number",
+  velZ: "number",
+  rotY: "number",
+  isGrounded: "boolean",
+  isSliding: "boolean",
+  isStunned: "boolean",
+  horizontalInput: "number",
+  score: "number",
+  distanceTraveled: "number",
+  survivalTime: "number",
+  collectibles: "number",
+  hasFinished: "boolean",
+  isAlive: "boolean",
+});
