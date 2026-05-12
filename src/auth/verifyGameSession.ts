@@ -1,4 +1,13 @@
+import { timingSafeEqual } from "crypto";
 import { prisma } from "../db/prisma";
+
+function safeCompare(a: string, b: string): boolean {
+  // timingSafeEqual requires equal-length buffers
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
 
 export interface VerifyResult {
   ok: true;
@@ -30,10 +39,10 @@ export async function verifyGameSession(
 
   let playerNumber: 1 | 2;
   let pseudo: string;
-  if (token === session.player1Token) {
+  if (safeCompare(token, session.player1Token)) {
     playerNumber = 1;
     pseudo = session.player1Pseudo ?? "Player1";
-  } else if (token === session.player2Token) {
+  } else if (safeCompare(token, session.player2Token)) {
     playerNumber = 2;
     pseudo = session.player2Pseudo ?? "Player2";
   } else {

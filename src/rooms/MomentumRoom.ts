@@ -60,19 +60,22 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
   }
 
   async onAuth(_client: Client, options: JoinOptions): Promise<AuthData> {
-    const result = await verifyGameSession(options.sessionId, options.token);
+    let result;
+    try {
+      result = await verifyGameSession(options.sessionId, options.token);
+    } catch (err) {
+      console.error(`[Room] Auth DB error:`, err);
+      throw new Error("internal-error");
+    }
     if (!result.ok) {
       throw new Error(`Auth failed: ${result.reason}`);
     }
 
-    // Verify this playerNumber slot isn't already taken in this room
     let alreadyTaken = false;
-    (this.state as GameState).players.forEach((p) => {
+    this.state.players.forEach((p) => {
       if (p.playerNumber === result.playerNumber) alreadyTaken = true;
     });
     if (alreadyTaken) throw new Error("player-slot-taken");
-
-    await markPlayerJoined(result.gameSessionInternalId, result.playerNumber);
 
     return {
       playerNumber: result.playerNumber,
@@ -88,6 +91,11 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     player.playerNumber = auth.playerNumber;
     player.pseudo = auth.pseudo;
     (this.state as GameState).players.set(client.sessionId, player);
+
+    // Mark in DB only after the player is confirmed seated
+    markPlayerJoined(auth.gameSessionInternalId, auth.playerNumber).catch((err) => {
+      console.error(`[Room] Failed to mark player joined:`, err);
+    });
 
     console.log(`[Room] ${auth.pseudo} (P${auth.playerNumber}) joined as ${client.sessionId}`);
 
