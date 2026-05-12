@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id
+  name          String    @db.Text
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?  @db.Text
+  userAgent String?  @db.Text
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String    @db.Text
+  providerId            String    @db.Text
+  userId                String
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?   @db.Text
+  password              String?   @db.Text
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String   @db.Text
+  value      String   @db.Text
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier(length: 191)])
+  @@map("verification")
+}
+
+model Jwks {
+  id         String    @id
+  publicKey  String    @db.Text
+  privateKey String    @db.Text
+  createdAt  DateTime
+  expiresAt  DateTime?
+
+  @@map("jwks")
+}
+
+model GameSession {
+  id            String      @id @default(cuid())
+  sessionId     String      @unique
+  player1Token  String
+  player2Token  String
+  player1Pseudo String?
+  player2Pseudo String?
+  player1Joined Boolean     @default(false)
+  player2Joined Boolean     @default(false)
+  status        String      @default("waiting") // waiting, playing, finished
+  mapName       String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime    @default(now())
+  expiresAt     DateTime
+  scores        Score[]
+
+  @@map("game_session")
+}
+
+model Score {
+  id                    String      @id @default(cuid())
+  playerName            String
+  playerNumber          Int         // 1 ou 2
+  totalScore            Int
+  distanceTraveled      Float       @default(0)
+  survivalTime          Float       @default(0)
+  collectiblesCollected Int         @default(0)
+  hasFinished           Boolean     @default(false)
+  gameSessionId         String
+  gameSession           GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  createdAt             DateTime    @default(now())
+
+  @@index([gameSessionId])
+  @@index([totalScore])
+  @@map("score")
+}
+
+model GlobalSettings {
+  id                 Int      @id @default(1)
+  registrationsOpen  Boolean  @default(true)
+  updatedAt          DateTime @updatedAt
+
+  @@map("global_settings")
+}

@@ -7,6 +7,7 @@ import {
   COUNTDOWN_SECONDS,
   STUN_DURATION_MS,
 } from "../config";
+import { verifyGameSession, markPlayerJoined } from "../auth/verifyGameSession";
 
 interface JoinOptions {
   sessionId: string;
@@ -24,7 +25,9 @@ interface PlayerInputMessage {
 }
 
 interface AuthData {
+  playerNumber: 1 | 2;
   pseudo: string;
+  gameSessionInternalId: string;
 }
 
 interface MomentumRoomOptions {
@@ -39,7 +42,7 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
 
   private elapsedInterval?: { clear(): void };
   private countdownInterval?: { clear(): void };
-  private nextPlayerNumber = 1;
+  private gameSessionInternalId: string = "";
 
   onCreate(options: { gameSessionId?: string }) {
     this.setState(new GameState());
@@ -56,23 +59,39 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     console.log(`[Room] Created for gameSession=${options.gameSessionId ?? "none"}`);
   }
 
-  // STUB auth — real implementation in M1.4
   async onAuth(_client: Client, options: JoinOptions): Promise<AuthData> {
-    if (!options.token) throw new Error("Missing token");
-    return { pseudo: options.pseudo ?? "Player" };
+    const result = await verifyGameSession(options.sessionId, options.token);
+    if (!result.ok) {
+      throw new Error(`Auth failed: ${result.reason}`);
+    }
+
+    // Verify this playerNumber slot isn't already taken in this room
+    let alreadyTaken = false;
+    (this.state as GameState).players.forEach((p) => {
+      if (p.playerNumber === result.playerNumber) alreadyTaken = true;
+    });
+    if (alreadyTaken) throw new Error("player-slot-taken");
+
+    await markPlayerJoined(result.gameSessionInternalId, result.playerNumber);
+
+    return {
+      playerNumber: result.playerNumber,
+      pseudo: result.pseudo,
+      gameSessionInternalId: result.gameSessionInternalId,
+    };
   }
 
   onJoin(client: Client, _options: JoinOptions, auth: AuthData) {
-    const gameState = this.state as GameState;
-    const playerNumber = this.nextPlayerNumber++;
+    this.gameSessionInternalId = auth.gameSessionInternalId;
+
     const player = new PlayerState();
-    player.playerNumber = playerNumber;
-    player.pseudo = auth.pseudo === "Player" ? `Player${playerNumber}` : auth.pseudo;
-    gameState.players.set(client.sessionId, player);
+    player.playerNumber = auth.playerNumber;
+    player.pseudo = auth.pseudo;
+    (this.state as GameState).players.set(client.sessionId, player);
 
-    console.log(`[Room] ${player.pseudo} (P${playerNumber}) joined as ${client.sessionId}`);
+    console.log(`[Room] ${auth.pseudo} (P${auth.playerNumber}) joined as ${client.sessionId}`);
 
-    if (gameState.players.size === MAX_CLIENTS_PER_ROOM) {
+    if ((this.state as GameState).players.size === MAX_CLIENTS_PER_ROOM) {
       this.startCountdown();
     }
   }
