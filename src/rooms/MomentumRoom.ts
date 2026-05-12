@@ -39,6 +39,7 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
 
   private elapsedInterval?: { clear(): void };
   private countdownInterval?: { clear(): void };
+  private nextPlayerNumber = 1;
 
   onCreate(options: { gameSessionId?: string }) {
     this.setState(new GameState());
@@ -63,7 +64,7 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
 
   onJoin(client: Client, _options: JoinOptions, auth: AuthData) {
     const gameState = this.state as GameState;
-    const playerNumber = gameState.players.size + 1;
+    const playerNumber = this.nextPlayerNumber++;
     const player = new PlayerState();
     player.playerNumber = playerNumber;
     player.pseudo = auth.pseudo === "Player" ? `Player${playerNumber}` : auth.pseudo;
