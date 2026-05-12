@@ -8,6 +8,7 @@ import {
   STUN_DURATION_MS,
 } from "../config";
 import { verifyGameSession, markPlayerJoined } from "../auth/verifyGameSession";
+import { persistRoomScores } from "../db/persistScores";
 
 interface JoinOptions {
   sessionId: string;
@@ -194,11 +195,11 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     });
     if (allFinished) {
       gameState.status = "finished";
-      this.determineWinner();
+      this.determineWinner().catch((err) => console.error(`[Room] determineWinner failed:`, err));
     }
   }
 
-  private determineWinner() {
+  private async determineWinner() {
     const gameState = this.state as GameState;
     let bestScore = -1;
     let winnerSessionId = "";
@@ -209,5 +210,17 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
       }
     });
     gameState.winnerSessionId = winnerSessionId;
+
+    if (!this.gameSessionInternalId) {
+      console.warn(`[Room] No gameSessionInternalId — skipping score persistence`);
+      return;
+    }
+
+    try {
+      await persistRoomScores(this.gameSessionInternalId, gameState.players);
+      console.log(`[Room] Scores persisted for ${this.gameSessionInternalId}`);
+    } catch (err) {
+      console.error(`[Room] Failed to persist scores:`, err);
+    }
   }
 }
