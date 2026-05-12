@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Server } from "colyseus";
+import { Server, matchMaker } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import { playground } from "@colyseus/playground";
@@ -31,6 +31,34 @@ const gameServer = new Server({
 });
 
 gameServer.define("momentum", MomentumRoom);
+
+// HTTP matchmake routes (used by Unity / other clients that POST to /matchmake/...).
+// Colyseus 0.17 ships the controller bridge but does not auto-mount the routes —
+// we wire them ourselves so JoinOrCreate() works from the WebGL client.
+app.use(express.json());
+app.post("/matchmake/:method/:roomName", async (req, res) => {
+  const method = req.params.method;
+  const roomName = req.params.roomName;
+  const clientOptions = req.body ?? {};
+
+  if (!matchMaker.controller.exposedMethods.includes(method)) {
+    return res.status(404).json({ error: "method-not-allowed" });
+  }
+
+  try {
+    const seatReservation = await matchMaker.controller.invokeMethod(
+      method,
+      roomName,
+      clientOptions
+    );
+    res.json(seatReservation);
+  } catch (err: any) {
+    res.status(err.code === 4212 ? 404 : 500).json({
+      code: err.code,
+      error: err.message ?? String(err),
+    });
+  }
+});
 
 // Monitor — protected by basic auth, skipped if creds missing
 const monitorUser = process.env.MONITOR_USER;
