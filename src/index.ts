@@ -6,6 +6,7 @@ import { playground } from "@colyseus/playground";
 import express from "express";
 import basicAuth from "express-basic-auth";
 import { createServer } from "http";
+import { MomentumRoom } from "./rooms/MomentumRoom";
 
 const port = Number(process.env.PORT || 2567);
 const app = express();
@@ -14,6 +15,8 @@ const httpServer = createServer(app);
 const gameServer = new Server({
   transport: new WebSocketTransport({ server: httpServer }),
 });
+
+gameServer.define("momentum", MomentumRoom);
 
 // Monitor — protected by basic auth, skipped if creds missing
 const monitorUser = process.env.MONITOR_USER;
