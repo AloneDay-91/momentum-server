@@ -1,4 +1,4 @@
-export const TICK_RATE_HZ = 20;
+export const TICK_RATE_HZ = 60;
 export const MAX_CLIENTS_PER_ROOM = 2;
 export const COUNTDOWN_SECONDS = 3;
 export const ROOM_TIMEOUT_MS = 5 * 60 * 1000;

@@ -26,6 +26,14 @@ export class PlayerState extends Schema {
   collectibles: number = 0;
   hasFinished: boolean = false;
   isAlive: boolean = true;
+
+  // Animation extras (added so remotes see jump/slide/vault/landing properly)
+  isManuallySliding: boolean = false;
+  isLandingHard: boolean = false;
+  // One-shot animation triggers. actionSeq increments each time a trigger fires;
+  // remotes detect "new trigger" by seeing actionSeq change. actionId: 1=jump, 2=slide, 3=vault.
+  actionSeq: number = 0;
+  actionId: number = 0;
 }
 
 defineTypes(PlayerState, {
@@ -48,4 +56,8 @@ defineTypes(PlayerState, {
   collectibles: "number",
   hasFinished: "boolean",
   isAlive: "boolean",
+  isManuallySliding: "boolean",
+  isLandingHard: "boolean",
+  actionSeq: "number",
+  actionId: "number",
 });

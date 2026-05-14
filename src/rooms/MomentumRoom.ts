@@ -8,7 +8,7 @@ import {
   STUN_DURATION_MS,
 } from "../config";
 import { verifyGameSession, markPlayerJoined } from "../auth/verifyGameSession";
-import { persistRoomScores } from "../db/persistScores";
+import { persistRoomScores, markGameSessionPlaying } from "../db/persistScores";
 
 interface JoinOptions {
   sessionId: string;
@@ -23,6 +23,10 @@ interface PlayerInputMessage {
   isGrounded: boolean;
   isSliding: boolean;
   horizontalInput: number;
+  isManuallySliding?: boolean;
+  isLandingHard?: boolean;
+  actionSeq?: number;
+  actionId?: number;
 }
 
 interface AuthData {
@@ -44,6 +48,7 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
   private elapsedInterval?: { clear(): void };
   private countdownInterval?: { clear(): void };
   private gameSessionInternalId: string = "";
+  private sceneReadySessionIds: Set<string> = new Set();
 
   onCreate(options: { gameSessionId?: string }) {
     this.setState(new GameState());
@@ -56,6 +61,8 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     this.onMessage("finish", (client: Client, payload: { score: number }) =>
       this.handleFinish(client, payload)
     );
+    this.onMessage("sceneReady", (client: Client) => this.handleSceneReady(client));
+    this.onMessage("death", (client: Client) => this.handleDeath(client));
 
     console.log(`[Room] Created for gameSession=${options.gameSessionId ?? "none"}`);
   }
@@ -100,8 +107,12 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
 
     console.log(`[Room] ${auth.pseudo} (P${auth.playerNumber}) joined as ${client.sessionId}`);
 
+    // Once both players are present, tell every client to LoadScene. We DON'T start the
+    // countdown yet — we wait for both clients to signal "sceneReady" so the in-game
+    // countdown is perfectly synchronized regardless of WebGL load time differences.
     if ((this.state as GameState).players.size === MAX_CLIENTS_PER_ROOM) {
-      this.startCountdown();
+      (this.state as GameState).status = "loading";
+      console.log(`[Room] Both players present → status=loading, waiting for sceneReady handshake`);
     }
   }
 
@@ -149,6 +160,16 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     this.elapsedInterval = this.clock.setInterval(() => {
       if (gameState.status === "playing") gameState.elapsedTime += 0.1;
     }, 100);
+
+    // Promote the DB GameSession to "playing" so /api/game/end accepts score POSTs
+    // when the match finishes. No client ever calls /api/game/start in the multiplayer
+    // flow, so without this the DB row stays at "waiting" forever and the REST endpoint
+    // rejects scores with "La partie n'est pas en cours".
+    if (this.gameSessionInternalId) {
+      markGameSessionPlaying(this.gameSessionInternalId).catch((err) => {
+        console.error(`[Room] Failed to mark GameSession playing:`, err);
+      });
+    }
   }
 
   // === Message handlers ===
@@ -156,7 +177,10 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
   private handleInput(client: Client, msg: PlayerInputMessage) {
     const gameState = this.state as GameState;
     const player = gameState.players.get(client.sessionId);
-    if (!player || gameState.status !== "playing" || player.isStunned) return;
+    if (!player || player.isStunned) return;
+    // Accept position writes during "loading"/"countdown" too — otherwise remotes
+    // see the player teleport into place at the GO instead of being there from start.
+    if (gameState.status === "finished") return;
 
     player.posX = msg.posX;
     player.posY = msg.posY;
@@ -168,6 +192,14 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     player.isGrounded = msg.isGrounded;
     player.isSliding = msg.isSliding;
     player.horizontalInput = msg.horizontalInput;
+
+    // Animation extras (optional for back-compat with older clients)
+    if (msg.isManuallySliding !== undefined) player.isManuallySliding = msg.isManuallySliding;
+    if (msg.isLandingHard !== undefined) player.isLandingHard = msg.isLandingHard;
+    if (msg.actionSeq !== undefined && msg.actionSeq > player.actionSeq) {
+      player.actionSeq = msg.actionSeq;
+      player.actionId = msg.actionId ?? 0;
+    }
   }
 
   private handleStun(attacker: Client) {
@@ -191,12 +223,38 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     if (!player || player.hasFinished || gameState.status !== "playing") return;
     player.hasFinished = true;
     player.score = payload.score;
+    this.checkAllDone();
+  }
 
-    let allFinished = true;
+  private handleSceneReady(client: Client) {
+    const gameState = this.state as GameState;
+    if (gameState.status !== "loading") return;
+    if (this.sceneReadySessionIds.has(client.sessionId)) return;
+    this.sceneReadySessionIds.add(client.sessionId);
+    console.log(`[Room] sceneReady from ${client.sessionId} (${this.sceneReadySessionIds.size}/${MAX_CLIENTS_PER_ROOM})`);
+    if (this.sceneReadySessionIds.size >= MAX_CLIENTS_PER_ROOM) {
+      this.startCountdown();
+    }
+  }
+
+  private handleDeath(client: Client) {
+    const gameState = this.state as GameState;
+    const player = gameState.players.get(client.sessionId);
+    if (!player || gameState.status !== "playing" || !player.isAlive) return;
+    player.isAlive = false;
+    console.log(`[Room] P${player.playerNumber} died`);
+    this.checkAllDone();
+  }
+
+  // Match ends when every player has either finished the parkour or died.
+  private checkAllDone() {
+    const gameState = this.state as GameState;
+    if (gameState.status !== "playing") return;
+    let allDone = true;
     gameState.players.forEach((p: PlayerState) => {
-      if (!p.hasFinished) allFinished = false;
+      if (p.isAlive && !p.hasFinished) allDone = false;
     });
-    if (allFinished) {
+    if (allDone) {
       gameState.status = "finished";
       this.determineWinner().catch((err) => console.error(`[Room] determineWinner failed:`, err));
     }
