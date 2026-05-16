@@ -9,6 +9,10 @@ import {
 } from "../config";
 import { verifyGameSession, markPlayerJoined } from "../auth/verifyGameSession";
 import { persistRoomScores, markGameSessionPlaying } from "../db/persistScores";
+import {
+  allPlayersWantRematch,
+  resetGameStateForRematch,
+} from "./rematch";
 
 interface JoinOptions {
   sessionId: string;
@@ -63,6 +67,7 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     );
     this.onMessage("sceneReady", (client: Client) => this.handleSceneReady(client));
     this.onMessage("death", (client: Client) => this.handleDeath(client));
+    this.onMessage("rematch", (client: Client) => this.handleRematch(client));
 
     console.log(`[Room] Created for gameSession=${options.gameSessionId ?? "none"}`);
   }
@@ -244,6 +249,30 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     player.isAlive = false;
     console.log(`[Room] P${player.playerNumber} died`);
     this.checkAllDone();
+  }
+
+  // Un joueur a cliqué « Rejouer » après la fin de partie. Quand les deux joueurs
+  // l'ont demandé, on remet l'état à "loading" : ça relance le handshake de démarrage
+  // (loading → sceneReady → countdown → playing) sur la MÊME room et la même session.
+  private handleRematch(client: Client) {
+    const gameState = this.state as GameState;
+    if (gameState.status !== "finished") return;
+
+    const player = gameState.players.get(client.sessionId);
+    if (!player) return;
+
+    player.wantsRematch = true;
+    console.log(`[Room] P${player.playerNumber} wants rematch`);
+
+    if (allPlayersWantRematch(gameState.players)) {
+      console.log(`[Room] All players want rematch → resetting to loading`);
+      this.elapsedInterval?.clear();
+      this.elapsedInterval = undefined;
+      this.countdownInterval?.clear();
+      this.countdownInterval = undefined;
+      this.sceneReadySessionIds.clear();
+      resetGameStateForRematch(gameState);
+    }
   }
 
   // Match ends when every player has either finished the parkour or died.
