@@ -126,7 +126,7 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
     gameState.players.delete(client.sessionId);
     console.log(`[Room] Client ${client.sessionId} left`);
 
-    if (gameState.status === "playing") {
+    if (gameState.status === "playing" || gameState.status === "loading") {
       gameState.status = "finished";
       this.determineWinner().catch((err) => {
         console.error(`[Room] determineWinner on disconnect failed:`, err);
@@ -260,6 +260,7 @@ export class MomentumRoom extends Room<MomentumRoomOptions> {
 
     const player = gameState.players.get(client.sessionId);
     if (!player) return;
+    if (player.wantsRematch) return;
 
     player.wantsRematch = true;
     console.log(`[Room] P${player.playerNumber} wants rematch`);
