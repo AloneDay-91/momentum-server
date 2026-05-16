@@ -34,6 +34,9 @@ export class PlayerState extends Schema {
   // remotes detect "new trigger" by seeing actionSeq change. actionId: 1=jump, 2=slide, 3=vault.
   actionSeq: number = 0;
   actionId: number = 0;
+
+  // Rematch : le joueur a cliqué « Rejouer » et attend l'autre.
+  wantsRematch: boolean = false;
 }
 
 defineTypes(PlayerState, {
@@ -60,4 +63,5 @@ defineTypes(PlayerState, {
   isLandingHard: "boolean",
   actionSeq: "number",
   actionId: "number",
+  wantsRematch: "boolean",
 });
